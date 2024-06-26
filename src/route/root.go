@@ -2,6 +2,7 @@ package route
 
 import (
 	"fmt"
+	"math/rand/v2"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -9,7 +10,8 @@ import (
 )
 
 type ProblemParams struct {
-	Data string `json:"data,omitempty"`
+	Data  string    `json:"data,omitempty"`
+	Point []float64 `json:"point,omitempty"`
 }
 
 type AlgorithmiaResponse struct {
@@ -48,7 +50,7 @@ func SolveProblem(ctx *gin.Context) {
 		return
 	}
 
-	response, err := solveProblem(problemParams.Data)
+	response, err := solveProblem(problemParams.Data, problemParams.Point)
 	if err != nil {
 		log.Error("problem solving failed", zap.Error(err))
 		ctx.JSON(http.StatusInternalServerError,
@@ -73,11 +75,27 @@ func SolveProblem(ctx *gin.Context) {
 
 }
 
-func solveProblem(data string) (result interface{}, err error) {
+func solveProblem(data string, point []float64) (result interface{}, err error) {
 
 	if data == "" {
 		return nil, fmt.Errorf("input data is not provided")
 	}
 
-	return nil, nil
+	randomArray := RandomArray(len(point))
+	result = ProblemParams{
+		Data:  "return random value",
+		Point: randomArray,
+	}
+
+	return result, nil
+}
+
+func RandomArray(arrayLength int) (result []float64) {
+
+	result = make([]float64, arrayLength)
+	for i := range result {
+		result[i] = rand.Float64()
+	}
+
+	return result
 }
