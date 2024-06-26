@@ -21,7 +21,7 @@ type AlgorithmiaResponse struct {
 }
 
 // Handler function
-func SolveProblem(ctx *gin.Context) {
+func SolveProblemHandler(ctx *gin.Context) {
 
 	log := zap.New(nil)
 
@@ -50,7 +50,7 @@ func SolveProblem(ctx *gin.Context) {
 		return
 	}
 
-	response, err := solveProblem(problemParams.Data, problemParams.Point)
+	response, err := SolveProblem(problemParams.Data, problemParams.Point)
 	if err != nil {
 		log.Error("problem solving failed", zap.Error(err))
 		ctx.JSON(http.StatusInternalServerError,
@@ -75,13 +75,14 @@ func SolveProblem(ctx *gin.Context) {
 
 }
 
-func solveProblem(data string, point []float64) (result interface{}, err error) {
+func SolveProblem(data string, point []float64) (result interface{}, err error) {
 
 	if data == "" {
 		return nil, fmt.Errorf("input data is not provided")
 	}
 
 	randomArray := RandomArray(len(point))
+
 	result = ProblemParams{
 		Data:  "return random value",
 		Point: randomArray,

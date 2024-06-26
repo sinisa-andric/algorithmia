@@ -12,7 +12,8 @@ func main() {
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.Default()
 
-	router.POST("/solve", route.SolveProblem)
+	router.POST("/solve", route.SolveProblemHandler)
+
 	http.ListenAndServe(":9000", router)
 
 }
