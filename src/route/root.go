@@ -15,7 +15,7 @@ type ProblemParams struct {
 }
 
 type AlgorithmiaResponse struct {
-	Approved bool        `json:"approved,omitempty"`
+	Approved bool        `json:"approved"`
 	Message  string      `json:"message,omitempty"`
 	Response interface{} `json:"response,omitempty"`
 }
@@ -38,12 +38,14 @@ func SolveProblemHandler(ctx *gin.Context) {
 
 	var problemParams ProblemParams
 
-	if err := ctx.BindJSON(&problemParams); err != nil {
+	err := ctx.BindJSON(&problemParams)
+	if err != nil {
 		log.Error("failed to bind request body", zap.Error(err))
-		ctx.JSON(http.StatusBadRequest,
+		ctx.JSON(
+			http.StatusBadRequest,
 			AlgorithmiaResponse{
 				Approved: false,
-				Message:  "failed to bind request body",
+				Message:  "failed to bind request body: " + err.Error(),
 				Response: nil,
 			},
 		)
@@ -52,20 +54,19 @@ func SolveProblemHandler(ctx *gin.Context) {
 
 	response, err := SolveProblem(problemParams.Data, problemParams.Point)
 	if err != nil {
-		log.Error("problem solving failed", zap.Error(err))
-		ctx.JSON(http.StatusInternalServerError,
+		ctx.JSON(
+			http.StatusNotAcceptable,
 			AlgorithmiaResponse{
 				Approved: false,
-				Message:  "not solved",
-				Response: nil,
+				Message:  "not solved: " + err.Error(),
+				Response: response,
 			},
 		)
 		return
 	}
 
-	log.Info("solve problem finished")
-
-	ctx.JSON(http.StatusCreated,
+	ctx.JSON(
+		http.StatusCreated,
 		AlgorithmiaResponse{
 			Approved: true,
 			Message:  "solved!",
@@ -73,14 +74,21 @@ func SolveProblemHandler(ctx *gin.Context) {
 		},
 	)
 
+	log.Info("solve problem finished",
+		zap.Any("points", problemParams.Point),
+		zap.Any("data", problemParams.Data),
+	)
+
 }
 
 func SolveProblem(data string, point []float64) (result interface{}, err error) {
 
 	if data == "" {
-		return nil, fmt.Errorf("input data is not provided")
+		err = fmt.Errorf("input data is not provided")
+		return nil, err
 	}
 
+	// logic
 	randomArray := RandomArray(len(point))
 
 	result = ProblemParams{
