@@ -44,7 +44,7 @@ To start using Algorithmia, follow these installation steps:
 1. Clone the repository:
 
    ```bash
-   git clone https://github.com/ TODO
+   git clone https://github.com/sinisa-andric/algorithmia
    ```
 
 2. Navigate to the project directory:
