@@ -34,7 +34,7 @@ func SolveProblemHandler(ctx *gin.Context) {
 		),
 	)
 
-	log.Info("problem started")
+	log.Info("solve problem started")
 
 	var problemParams ProblemParams
 
