@@ -1,0 +1,134 @@
+package solvers
+
+import (
+	"algorithmia/src/functions"
+	"algorithmia/src/models"
+	"fmt"
+	"math"
+	"math/rand/v2"
+)
+
+const (
+	electrostaticDischargePopulation = 20
+	electrostaticDischargeMaxSteps   = 500
+	electrostaticDischargeTolerance  = 1e-6
+	electrostaticDischargeRangeLow   = -5.0
+	electrostaticDischargeRangeHigh  = 5.0
+)
+
+// ElectrostaticDischarge minimizuje konfigurisanu benchmark funkciju koristeći Electrostatic Discharge Algorithm:
+// kanal pražnjenja se sa određenom verovatnoćom grana u nasumičnom nezavisnom pravcu čiji domet opada tokom
+// izvršavanja, a inače nastavlja duž najboljeg provodnog puta ka best-u
+// problem.Point inicijalizuje populaciju kanala pražnjenja i određuje njenu dimenzionalnost
+func ElectrostaticDischarge(problem models.Problem) (result models.Result, err error) {
+
+	if len(problem.Point) == 0 {
+		err = fmt.Errorf("starting point is required")
+		return result, err
+	}
+
+	fnName, _ := problem.Payload["function"].(string)
+	fn, err := functions.Get(fnName)
+	if err != nil {
+		return result, err
+	}
+	if err := fn.ValidateDimension(len(problem.Point)); err != nil {
+		return result, err
+	}
+
+	population := electrostaticDischargePopulation
+	if v, ok := problem.Payload["population"].(float64); ok {
+		population = int(v)
+	}
+
+	maxSteps := electrostaticDischargeMaxSteps
+	if v, ok := problem.Payload["max_steps"].(float64); ok {
+		maxSteps = int(v)
+	}
+
+	tolerance := electrostaticDischargeTolerance
+	if v, ok := problem.Payload["tolerance"].(float64); ok {
+		tolerance = v
+	}
+	includeTrajectory, _ := problem.Payload["include_trajectory"].(bool)
+	var trajectory []models.TrajectoryPoint
+
+	dimensions := len(problem.Point)
+
+	individuals := make([][]float64, population)
+	values := make([]float64, population)
+	for i := range individuals {
+		individual := make([]float64, dimensions)
+		for d := range individual {
+			individual[d] = electrostaticDischargeRangeLow + rand.Float64()*(electrostaticDischargeRangeHigh-electrostaticDischargeRangeLow)
+		}
+		individuals[i] = individual
+		values[i] = fn.Evaluate(individual)
+	}
+
+	best := append([]float64(nil), individuals[0]...)
+	bestValue := values[0]
+	for i, v := range values {
+		if v < bestValue {
+			bestValue = v
+			best = append([]float64(nil), individuals[i]...)
+		}
+	}
+
+	maxNoImprove := max(50, maxSteps/20)
+	noImprove := 0
+	steps := 0
+	for ; steps < maxSteps; steps++ {
+
+		prevBestValue := bestValue
+
+		for i := range individuals {
+			if rand.Float64() < 0.3 {
+				for d := range individuals[i] {
+					individuals[i][d] = clamp(individuals[i][d]+(rand.Float64()*2-1)*1.0*(1-float64(steps)/float64(maxSteps)), electrostaticDischargeRangeLow, electrostaticDischargeRangeHigh)
+				}
+			} else {
+				for d := range individuals[i] {
+					individuals[i][d] = clamp(individuals[i][d]+rand.Float64()*(best[d]-individuals[i][d])*0.5, electrostaticDischargeRangeLow, electrostaticDischargeRangeHigh)
+				}
+			}
+			values[i] = fn.Evaluate(individuals[i])
+		}
+
+		for i, v := range values {
+			if v < bestValue {
+				bestValue = v
+				best = append([]float64(nil), individuals[i]...)
+			}
+			if includeTrajectory {
+				trajectory = recordTrajectory(trajectory, steps, best, bestValue, false)
+			}
+		}
+
+		if math.Abs(bestValue-prevBestValue) < tolerance {
+			noImprove++
+		} else {
+			noImprove = 0
+		}
+		if noImprove >= maxNoImprove {
+			steps++
+			break
+		}
+	}
+
+	if includeTrajectory {
+		trajectory = recordTrajectory(trajectory, steps, best, bestValue, true)
+		trajectory = capTrajectory(trajectory, trajectoryCapLen)
+	}
+
+	result = models.Result{
+		Method:     "electrostatic_discharge",
+		Point:      best,
+		Value:      bestValue,
+		Steps:      steps,
+		Function:   fn.Name,
+		Trajectory: trajectory,
+	}
+
+	return result, nil
+}

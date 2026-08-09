@@ -1,0 +1,121 @@
+package solvers
+
+import (
+	"algorithmia/src/functions"
+	"algorithmia/src/models"
+	"fmt"
+	"math"
+)
+
+const (
+	diffgradLearningRate = 0.001
+	diffgradBeta1        = 0.9
+	diffgradBeta2        = 0.999
+	diffgradEpsilon      = 1e-8
+	diffgradMaxSteps     = 1000
+	diffgradTolerance    = 1e-6
+)
+
+// Diffgrad minimizuje konfigurisanu benchmark funkciju koristeći DiffGrad: Adam korak se dodatno skalira
+// koeficijentom trenja izvedenim iz promene gradijenta između uzastopnih koraka
+// problem.Point je početna tačka pretrage
+func Diffgrad(problem models.Problem) (result models.Result, err error) {
+
+	if len(problem.Point) == 0 {
+		err = fmt.Errorf("starting point is required")
+		return result, err
+	}
+
+	fnName, _ := problem.Payload["function"].(string)
+	fn, err := functions.Get(fnName)
+	if err != nil {
+		return result, err
+	}
+	if err := fn.ValidateDimension(len(problem.Point)); err != nil {
+		return result, err
+	}
+
+	learningRate := diffgradLearningRate
+	if v, ok := problem.Payload["learning_rate"].(float64); ok {
+		learningRate = v
+	}
+
+	beta1 := diffgradBeta1
+	if v, ok := problem.Payload["beta1"].(float64); ok {
+		beta1 = v
+	}
+
+	beta2 := diffgradBeta2
+	if v, ok := problem.Payload["beta2"].(float64); ok {
+		beta2 = v
+	}
+
+	epsilon := diffgradEpsilon
+	if v, ok := problem.Payload["epsilon"].(float64); ok {
+		epsilon = v
+	}
+
+	maxSteps := diffgradMaxSteps
+	if v, ok := problem.Payload["max_steps"].(float64); ok {
+		maxSteps = int(v)
+	}
+
+	tolerance := diffgradTolerance
+	if v, ok := problem.Payload["tolerance"].(float64); ok {
+		tolerance = v
+	}
+
+	includeTrajectory, _ := problem.Payload["include_trajectory"].(bool)
+	var trajectory []models.TrajectoryPoint
+
+	point := append([]float64(nil), problem.Point...)
+	m := make([]float64, len(point))
+	v := make([]float64, len(point))
+	gradPrev := make([]float64, len(point))
+	steps := 0
+
+	for ; steps < maxSteps; steps++ {
+		gradient := fn.Gradient(point)
+		if norm(gradient) < tolerance {
+			break
+		}
+
+		t := float64(steps + 1)
+		beta1T := math.Pow(beta1, t)
+		beta2T := math.Pow(beta2, t)
+
+		for i := range point {
+			m[i] = beta1*m[i] + (1-beta1)*gradient[i]
+			v[i] = beta2*v[i] + (1-beta2)*gradient[i]*gradient[i]
+
+			mHat := m[i] / (1 - beta1T)
+			vHat := v[i] / (1 - beta2T)
+
+			dfc := 1 / (1 + math.Exp(-math.Abs(gradient[i]-gradPrev[i])))
+
+			point[i] -= learningRate * dfc * mHat / (math.Sqrt(vHat) + epsilon)
+		}
+
+		gradPrev = append([]float64(nil), gradient...)
+
+		if includeTrajectory {
+			trajectory = recordTrajectory(trajectory, steps, point, fn.Evaluate(point), false)
+		}
+	}
+
+	if includeTrajectory {
+		trajectory = recordTrajectory(trajectory, steps, point, fn.Evaluate(point), true)
+		trajectory = capTrajectory(trajectory, trajectoryCapLen)
+	}
+
+	result = models.Result{
+		Method:     "diffgrad",
+		Point:      point,
+		Value:      fn.Evaluate(point),
+		Steps:      steps,
+		Function:   fn.Name,
+		Trajectory: trajectory,
+	}
+
+	return result, nil
+}
